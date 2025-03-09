@@ -1,0 +1,34 @@
+%TF.GenerationSoftware,Flux,Pcbnew,7.0.11-7.0.11~ubuntu20.04.1*%
+%TF.CreationDate,2025-03-04T17:49:28+00:00*%
+%TF.ProjectId,input,696e7075-742e-46b6-9963-61645f706362,rev?*%
+%TF.SameCoordinates,Original*%
+%TF.FileFunction,Paste,Top*%
+%TF.FilePolarity,Positive*%
+%FSLAX46Y46*%
+G04 Gerber Fmt 4.6, Leading zero omitted, Abs format (unit mm)*
+G04 Filename: balance-board-2*
+G04 Build it with Flux! Visit our site at: https://www.flux.ai (PCBNEW 7.0.11-7.0.11~ubuntu20.04.1) date 2025-03-04 17:49:28*
+%MOMM*%
+%LPD*%
+G01*
+G04 APERTURE LIST*
+G04 APERTURE END LIST*
+%TO.C,*%
+G36*
+X22497997Y1116402D02*
+G01*
+X21297997Y1116398D01*
+X21297984Y4616398D01*
+X22497984Y4616402D01*
+X22497997Y1116402D01*
+G37*
+G36*
+X22498016Y-4223598D02*
+G01*
+X21298016Y-4223602D01*
+X21298003Y-723602D01*
+X22498003Y-723598D01*
+X22498016Y-4223598D01*
+G37*
+%TD*%
+M02*
