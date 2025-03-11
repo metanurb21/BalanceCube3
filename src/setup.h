@@ -1,6 +1,3 @@
-
-#include <Arduino.h>
-
 #define BUZZER 27
 #define VBAT 34
 #define INT_LED 2
@@ -158,34 +155,3 @@ enum VerticalState
 // float angleY = 0; // Reset the angle
 // float biasY = 0;  // Reset the gyro bias
 // float P_00Y = 0, P_01Y = 0, P_10Y = 0, P_11Y = 0;
-
-void save();
-void writeTo(byte device, byte address, byte value);
-void angle_setup();
-void angle_calc();
-void XYZ_to_threeWay(float pwm_X, float pwm_Y, float pwm_Z);
-void threeWay_to_XY(int in_speed1, int in_speed2, int in_speed3);
-void battVoltage(double voltage);
-void pwmSet(uint8_t channel, uint32_t value);
-void Motor_control(int motor_number, int sp, int motor_speed, uint8_t dir_pin, uint8_t pwm_channel);
-void ENC1_READ();
-void ENC2_READ();
-void ENC3_READ();
-void tone(uint8_t pin, unsigned int frequency, unsigned long duration, uint8_t channel);
-void playNotes(uint16_t note1, uint16_t note2, uint16_t note3, long duration);
-void noTone(uint8_t pin, uint8_t channel);
-void turnoff_pixel();
-void updateVerticalState();
-void handleVerticalVertexState();
-void handleVerticalEdgeState();
-void calibrateGyro();
-void readGyroData();
-void readAccelData();
-void calculateAngles();
-void kalmanInit(struct KalmanFilter *kf);
-void myFunctionOnCore0(void *pvParameters);
-void updateMotorSpeeds();
-void handleCurrentState();
-void updateBatteryVoltage();
-void handleCalibrationIndication();
-void indicateCalibration();

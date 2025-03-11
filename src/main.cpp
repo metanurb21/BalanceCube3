@@ -16,6 +16,37 @@
 #define SERVICE_UUID "0000FF00-0000-1000-8000-00805F9B34FB"
 #define CHAR_UUID "0000FF01-0000-1000-8000-00805F9B34FB"
 
+void save();
+void writeTo(byte device, byte address, byte value);
+void angle_setup();
+void angle_calc();
+void XYZ_to_threeWay(float pwm_X, float pwm_Y, float pwm_Z);
+void threeWay_to_XY(int in_speed1, int in_speed2, int in_speed3);
+void battVoltage(double voltage);
+void pwmSet(uint8_t channel, uint32_t value);
+void Motor_control(int motor_number, int sp, int motor_speed, uint8_t dir_pin, uint8_t pwm_channel);
+void ENC1_READ();
+void ENC2_READ();
+void ENC3_READ();
+void tone(uint8_t pin, unsigned int frequency, unsigned long duration, uint8_t channel);
+void playNotes(uint16_t note1, uint16_t note2, uint16_t note3, long duration);
+void noTone(uint8_t pin, uint8_t channel);
+void turnoff_pixel();
+void updateVerticalState();
+void handleVerticalVertexState();
+void handleVerticalEdgeState();
+void calibrateGyro();
+void readGyroData();
+void readAccelData();
+void calculateAngles();
+void kalmanInit(struct KalmanFilter *kf);
+void myFunctionOnCore0(void *pvParameters);
+void updateMotorSpeeds();
+void handleCurrentState();
+void updateBatteryVoltage();
+void handleCalibrationIndication();
+void indicateCalibration();
+
 // BLE characteristic to receive data
 BLECharacteristic *pCharacteristic;
 
@@ -95,10 +126,12 @@ class MyCallbacks : public BLECharacteristicCallbacks
           offsets.acXe = AcX;
           offsets.acYe = AcY;
           offsets.acZe = AcZ + 16384;
+          vertex_calibrated = true;
+          save();
+
           tone(BUZZER, freq + 800, dure / 3, channel);
           delay(100);
           tone(BUZZER, freq + 1000, dure / 3, channel);
-          vertex_calibrated = true;
           for (int i = 0; i < NUMPIXELS; i++)
           {
             pixels.setPixelColor(i, 128, 128, 128);
@@ -117,7 +150,6 @@ class MyCallbacks : public BLECharacteristicCallbacks
           delay(1000);
           turnoff_pixel();
           pixels.clear();
-          save();
         }
         else
         {
@@ -563,10 +595,6 @@ void handleVerticalVertexState()
   // Apply low-pass filter to gyroscope readings
   gyroXfilt = alpha * gyroX + (1 - alpha) * gyroXfilt;
   gyroYfilt = alpha * gyroY + (1 - alpha) * gyroYfilt;
-
-  // Introduce a 1 degree per second rotation on the z-axis
-  // const float rotationRateZ = 1.0; // 1 degree per second
-  // gyroZ += rotationRateZ;
 
   // Calculate PWM values using PID control
   int pwm_X = constrain(K1 * robot_angleX + K2 * gyroXfilt + K3 * speed_X + K4 * motors_speed_X, -255, 255);
