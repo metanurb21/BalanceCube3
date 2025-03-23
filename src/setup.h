@@ -30,8 +30,8 @@
 #define PWR_MGMT_1 0x6B
 #define PWR_MGMT_2 0x6C
 
-#define NUMPIXELS 8
-#define neoPixelPin 19
+// #define NUMBERPIXELS 8
+// #define neoPixelPin 19
 
 #define accSens 0
 #define gyroSens 0
@@ -39,6 +39,17 @@
 #define EEPROM_SIZE 64
 
 float Gyro_amount = 0.996;
+float Gyro_amount_x = 0.996;
+uint8_t motor_speed_x_divisor = 5;
+uint8_t motor_speed_y_divisor = 5;
+uint8_t motor_speed_up = 0;
+uint8_t motor_speed_up_delay = 0;
+bool speed_up = false;
+bool slow_down = false;
+bool capt_speed = false;
+uint8_t capt_speed_val = 0;
+uint8_t motor_hold_delay = 0;
+bool toggle_speed_up = true;
 
 bool vertical_vertex = false;
 bool vertical_edge = false;
@@ -46,6 +57,8 @@ bool calibrating = false;
 bool vertex_calibrated = false;
 bool calibrated = false;
 bool calibrated_leds = false;
+bool ledState = false;
+bool ledStateSwitch = false;
 
 // Sound
 uint8_t octave = 1;
@@ -66,6 +79,8 @@ float eK3 = 2.5;
 float eK4 = 0.014;
 
 int loop_time = 15;
+
+float speed_offset = 0.866;
 
 ///
 struct PIDParams
@@ -113,7 +128,7 @@ int32_t motors_speed_X;
 int32_t motors_speed_Y;
 int32_t motors_speed_Z;
 
-long currentT, previousT_1, previousT_2;
+long currentT, previousT_1, previousT_2, previousT_3;
 
 volatile int enc_count1 = 0, enc_count2 = 0, enc_count3 = 0;
 int16_t motor1_speed;

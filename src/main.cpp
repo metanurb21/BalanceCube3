@@ -9,12 +9,26 @@
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
-#include <Adafruit_NeoPixel.h>
+// #include <Adafruit_NeoPixel.h>
 #include "Tone32.h"
+#include <string>
+#include <FastLED.h>
 
 #define DEVICE_NAME "ESP32_BLE_Cube"
 #define SERVICE_UUID "0000FF00-0000-1000-8000-00805F9B34FB"
 #define CHAR_UUID "0000FF01-0000-1000-8000-00805F9B34FB"
+#define CHAR_UUID_NOTIFY "0000FF02-0000-1000-8000-00805F9B34FB" // New UUID for sending data
+
+#define NUM_LEDS 9
+#define LED_DATA_PIN 19
+#define COLOR_ORDER GRB
+#define CHIPSET WS2812B
+#define BRIGHTNESS 255
+#define VOLTS 3.3
+#define MAX_AMPS 500 // milliamps
+uint8_t randNum1 = 0;
+uint8_t randNum2 = 0;
+uint8_t randNum3 = 0;
 
 void save();
 void writeTo(byte device, byte address, byte value);
@@ -31,7 +45,6 @@ void ENC3_READ();
 void tone(uint8_t pin, unsigned int frequency, unsigned long duration, uint8_t channel);
 void playNotes(uint16_t note1, uint16_t note2, uint16_t note3, long duration);
 void noTone(uint8_t pin, uint8_t channel);
-void turnoff_pixel();
 void updateVerticalState();
 void handleVerticalVertexState();
 void handleVerticalEdgeState();
@@ -46,12 +59,21 @@ void handleCurrentState();
 void updateBatteryVoltage();
 void handleCalibrationIndication();
 void indicateCalibration();
+void sendData(const std::string &data);
+std::string createMessage(const std::string &text, int32_t value);
+void doLights();
+uint8_t getRandomNumber();
 
 // BLE characteristic to receive data
-BLECharacteristic *pCharacteristic;
+// BLECharacteristic *pCharacteristic;
+// BLE characteristic to send data
+// BLECharacteristic *pNotifyCharacteristic;
+// Create a bi-directional BLE characteristic
+BLECharacteristic *pBiDirectionalCharacteristic;
 
 // Lights
-Adafruit_NeoPixel pixels(NUMPIXELS, neoPixelPin, NEO_GRB + NEO_KHZ800);
+// Adafruit_NeoPixel pixels(NUMBERPIXELS, neoPixelPin, NEO_GRB + NEO_KHZ800);
+CRGB leds[NUM_LEDS];
 
 // Sate machine
 VerticalState currentState = VERTICAL_UNKNOWN;
@@ -59,9 +81,9 @@ VerticalState currentState = VERTICAL_UNKNOWN;
 // Callback class to handle incoming data
 class MyCallbacks : public BLECharacteristicCallbacks
 {
-  void onWrite(BLECharacteristic *pCharacteristic)
+  void onWrite(BLECharacteristic *pBiDirectionalCharacteristic)
   {
-    std::string receivedData = pCharacteristic->getValue();
+    std::string receivedData = pBiDirectionalCharacteristic->getValue();
     if (receivedData.length() > 0)
     {
       String command = String(receivedData.c_str());
@@ -73,16 +95,20 @@ class MyCallbacks : public BLECharacteristicCallbacks
         calibrating = true;
         Serial.println("Calibrating on.");
         Serial.println("Set the cube on vertex...");
-        for (int i = 0; i < NUMPIXELS; i++)
-        {
-          pixels.setPixelColor(i, 0, 0, 255);
-          pixels.setBrightness(255);
-          pixels.show();
-          delay(100);
-        }
+        sendData("\r\n Calibrating on.");
+        sendData("\r\n Set the cube on vertex...");
+        // for (int i = 0; i < NUMBERPIXELS; i++)
+        // {
+        //   pixels.setPixelColor(i, 0, 0, 255);
+        //   pixels.setBrightness(255);
+        //   pixels.show();
+        //   delay(100);
+        // }
+
+        ledState = true;
         playNotes(4186, 4699, 5274, 100);
         delay(1000);
-        pixels.clear();
+        // pixels.clear();
       }
       if (command.equals("o") && calibrating)
       {
@@ -100,19 +126,23 @@ class MyCallbacks : public BLECharacteristicCallbacks
           offsets.acZv = AcZ + 16384;
           Serial.println("Vertex OK.");
           Serial.println("Set the cube on edge...");
+          sendData("\r\n Vertex OK.");
+          sendData("\r\n Set the cube on edge...");
           tone(BUZZER, freq + 800, dure / 3, channel);
           vertex_calibrated = true;
-          for (int i = 0; i < NUMPIXELS; i++)
-          {
-            pixels.setPixelColor(i, 0, 255, 0);
-            pixels.setBrightness(255);
-            pixels.show();
-            delay(100);
-          }
+          // for (int i = 0; i < NUMBERPIXELS; i++)
+          // {
+          //   pixels.setPixelColor(i, 0, 255, 0);
+          //   pixels.setBrightness(255);
+          //   pixels.show();
+          //   delay(100);
+          // }
+
+          ledState = true;
           playNotes(4186, 4699, 5274, 100);
           delay(1000);
-          pixels.clear();
-          turnoff_pixel();
+          // pixels.clear();
+          // turnoff_pixel();
         }
         else if (abs(AcX) > 7000 && abs(AcX) < 10000 && abs(AcY) < 2000 && vertex_calibrated)
         {
@@ -123,33 +153,37 @@ class MyCallbacks : public BLECharacteristicCallbacks
           Serial.println(" Z: ");
           Serial.println(AcZ + 16384);
           Serial.println("Edge OK.");
+          sendData("\r\n Edge OK.");
           offsets.acXe = AcX;
           offsets.acYe = AcY;
           offsets.acZe = AcZ + 16384;
-          vertex_calibrated = true;
+          Serial.println("Saving... ");
+          sendData("\r\n Saving...");
           save();
 
           tone(BUZZER, freq + 800, dure / 3, channel);
           delay(100);
           tone(BUZZER, freq + 1000, dure / 3, channel);
-          for (int i = 0; i < NUMPIXELS; i++)
-          {
-            pixels.setPixelColor(i, 128, 128, 128);
-            pixels.setBrightness(255);
-            pixels.show();
-            delay(100);
-          }
-          turnoff_pixel();
-          for (int i = 0; i < NUMPIXELS; i++)
-          {
-            pixels.setPixelColor(i, 128, 128, 128);
-            pixels.setBrightness(255);
-            pixels.show();
-            delay(100);
-          }
-          delay(1000);
-          turnoff_pixel();
-          pixels.clear();
+          // for (int i = 0; i < NUMBERPIXELS; i++)
+          // {
+          //   pixels.setPixelColor(i, 128, 128, 128);
+          //   pixels.setBrightness(255);
+          //   pixels.show();
+          //   delay(100);
+          // }
+          // turnoff_pixel();
+          // for (int i = 0; i < NUMBERPIXELS; i++)
+          // {
+          //   pixels.setPixelColor(i, 128, 128, 128);
+          //   pixels.setBrightness(255);
+          //   pixels.show();
+          //   delay(100);
+          // }
+          // delay(1000);
+          // turnoff_pixel();
+          // pixels.clear();
+
+          ledState = true;
         }
         else
         {
@@ -160,36 +194,113 @@ class MyCallbacks : public BLECharacteristicCallbacks
           Serial.println(" Z: ");
           Serial.println(AcZ + 16384);
           Serial.println("The angles are wrong!!!");
-          for (int i = 0; i < NUMPIXELS; i++)
-          {
-            pixels.setPixelColor(i, 255, 0, 0);
-            pixels.setBrightness(255);
-            pixels.show();
-            delay(100);
-          }
-          turnoff_pixel();
-          for (int i = 0; i < NUMPIXELS; i++)
-          {
-            pixels.setPixelColor(i, 255, 0, 0);
-            pixels.setBrightness(255);
-            pixels.show();
-            delay(100);
-          }
-          delay(1000);
-          turnoff_pixel();
+          sendData("\r\n The angles are wrong!!!");
+          // for (int i = 0; i < NUMBERPIXELS; i++)
+          // {
+          //   pixels.setPixelColor(i, 255, 0, 0);
+          //   pixels.setBrightness(255);
+          //   pixels.show();
+          //   delay(100);
+          // }
+          // turnoff_pixel();
+          // for (int i = 0; i < NUMBERPIXELS; i++)
+          // {
+          //   pixels.setPixelColor(i, 255, 0, 0);
+          //   pixels.setBrightness(255);
+          //   pixels.show();
+          //   delay(100);
+          // }
+          // delay(1000);
+          // turnoff_pixel();
+
+          ledState = true;
           playNotes(4186, 4186, 4186, 100);
           delay(300);
         }
+      }
+      /*
+      float K1 = 180;
+      float K2 = 30.00;
+      float K3 = 1.6;
+      float K4 = 0.008;
+      */
+      if (command.equals("1"))
+      {
+        K1 += 1;
+      }
+      if (command.equals("2"))
+      {
+        K2 += 1;
+      }
+      if (command.equals("3"))
+      {
+        K3 += 1;
+      }
+      if (command.equals("4"))
+      {
+        K4 += 0.01;
+      }
+      //
+      if (command.equals("5"))
+      {
+        K1 -= 1;
+      }
+      if (command.equals("6"))
+      {
+        K2 -= 1;
+      }
+      if (command.equals("7"))
+      {
+        K3 -= 1;
+      }
+      if (command.equals("8"))
+      {
+        K4 -= 0.001;
+      }
+      if (command.equals("9"))
+      {
+        speed_up = true;
+        Serial.println("Speed Increase");
+        sendData("\r\n Speed Increase");
+      }
+      if (command.equals("0"))
+      {
+        // speed_up = false;
+        // Serial.println("Speed Decrease");
+        // sendData("\r\n Speed Decrease");
+        std::string message = createMessage("Battery Voltage: ", (double)analogRead(VBAT) / 204);
+        sendData(message.c_str());
+      }
+      if (command.equals("s"))
+      {
+        std::string message = createMessage("motors_speed_X: ", motors_speed_X);
+        sendData(message.c_str());
+      }
+      if (command.equals("p"))
+      {
+        ledState = true;
       }
     }
   }
 };
 
+// Function to concatenate a string and an int32_t
+std::string createMessage(const std::string &text, int32_t value)
+{
+  return "\r\n" + text + std::to_string(value);
+}
+
 void setup()
 {
   Serial.begin(115200);
-  pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
-  pixels.clear(); // Set all pixel colors to 'off'
+  // pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
+  // pixels.clear(); // Set all pixel colors to 'off'
+  FastLED.addLeds<CHIPSET, LED_DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
+  FastLED.setMaxPowerInVoltsAndMilliamps(VOLTS, MAX_AMPS);
+  FastLED.setBrightness(BRIGHTNESS);
+  FastLED.clear();
+  FastLED.show();
+
   // Initialize BLE
   BLEDevice::init(DEVICE_NAME);
 
@@ -200,12 +311,25 @@ void setup()
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
   // Create BLE Characteristic
-  pCharacteristic = pService->createCharacteristic(
+  // pCharacteristic = pService->createCharacteristic(
+  //     CHAR_UUID,
+  //     BLECharacteristic::PROPERTY_WRITE);
+
+  // // Set callback to handle data reception
+  // pCharacteristic->setCallbacks(new MyCallbacks());
+
+  // // Create BLE Characteristic for sending data
+  // pNotifyCharacteristic = pService->createCharacteristic(
+  //     CHAR_UUID_NOTIFY,
+  //     BLECharacteristic::PROPERTY_NOTIFY);
+
+  // Create a bi-directional BLE characteristic
+  pBiDirectionalCharacteristic = pService->createCharacteristic(
       CHAR_UUID,
-      BLECharacteristic::PROPERTY_WRITE);
+      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
 
   // Set callback to handle data reception
-  pCharacteristic->setCallbacks(new MyCallbacks());
+  pBiDirectionalCharacteristic->setCallbacks(new MyCallbacks());
 
   // Start the service
   pService->start();
@@ -219,37 +343,38 @@ void setup()
   // SerialBT.begin("ESP32-Cube"); // Bluetooth device name
   EEPROM.begin(EEPROM_SIZE);
 
-  // FastLED.addLeds<WS2812B, LED_PIN, RGB>(leds, NUM_PIXELS); // GRB ordering is typical
-
   pinMode(BUZZER, OUTPUT);
   pinMode(BRAKE, OUTPUT);
   digitalWrite(BRAKE, HIGH);
-
-  for (int i = 0; i < NUMPIXELS; i++)
+  /*
+  uint8_t rand1 = random(0, 256);
+  uint8_t rand2 = random(0, 256);
+  uint8_t rand3 = random(0, 256);
+  for (int i = 0; i < NUMBERPIXELS; i++)
   {
-    pixels.setPixelColor(i, 0, 0, 255);
+    pixels.setPixelColor(i, rand1, rand2, rand3);
     pixels.setBrightness(255);
     pixels.show();
     delay(100);
   }
   turnoff_pixel();
-  for (int i = NUMPIXELS - 1; i > 0; i--)
+  for (int i = NUMBERPIXELS - 1; i > 0; i--)
   {
-    pixels.setPixelColor(i, 0, 0, 255);
+    pixels.setPixelColor(i, rand1, rand2, rand3);
     pixels.setBrightness(255);
     pixels.show();
     delay(100);
   }
   turnoff_pixel();
-  for (int i = 0; i < NUMPIXELS; i++)
+  for (int i = 0; i < NUMBERPIXELS; i++)
   {
-    pixels.setPixelColor(i, 0, 255, 0);
+    pixels.setPixelColor(i, rand1, rand2, rand3);
     pixels.setBrightness(255);
     pixels.show();
     delay(100);
   }
   turnoff_pixel();
-
+  */
   pinMode(DIR1, OUTPUT);
   pinMode(ENC1_1, INPUT);
   pinMode(ENC1_2, INPUT);
@@ -282,8 +407,66 @@ void setup()
   {
     calibrated = true;
   }
-  playNotes(4186, 4699, 5274, 100);
+
+  for (int i = 0; i < NUM_LEDS; i++)
+  {
+    leds[i] = CRGB::Blue; // Set LED color
+    FastLED.show();
+    tone(BUZZER, 2186 + (i * 100), 100, channel);
+    delay(80);
+  }
+  delay(500);
+  FastLED.clear();
+  FastLED.show();
   angle_setup();
+  sendData("Hello from Balancing Cube");
+}
+
+// Function to send data via BLE
+void sendData(const std::string &data)
+{
+  if (pBiDirectionalCharacteristic != nullptr)
+  {
+    pBiDirectionalCharacteristic->setValue(data);
+    pBiDirectionalCharacteristic->notify();
+  }
+}
+
+void doLights()
+{
+  static unsigned long startMillis = 0; // Tracks the start time
+  static bool isRunning = false;        // Tracks whether the function is active
+  // randNum1 = getRandomNumber();
+  // randNum2 = getRandomNumber();
+  // randNum3 = getRandomNumber();
+
+  if (!isRunning)
+  {
+    // Start the FastLED sequence
+    startMillis = millis();
+    isRunning = true;
+  }
+
+  unsigned long currentMillis = millis();
+
+  if (isRunning && (currentMillis - startMillis < 2000))
+  {
+    // Run FastLED animations
+    fadeToBlackBy(leds, NUM_LEDS, 2);               // Fade effect
+    int ledIndex = (currentMillis / 80) % NUM_LEDS; // Adjust speed of animation
+    leds[ledIndex] = CRGB::White;                   // Set LED color
+    leds[ledIndex - 1] = CRGB(45, 100, 180);
+    FastLED.show();
+  }
+  else if (isRunning)
+  {
+    // Stop the FastLED sequence after 2 seconds
+    FastLED.clear();
+    FastLED.show();
+    isRunning = false;
+    ledState = false;
+    previousT_3 = currentMillis;
+  }
 }
 
 void loop()
@@ -305,6 +488,16 @@ void loop()
     handleCalibrationIndication();
     previousT_2 = currentT;
   }
+  // if (currentT - previousT_3 >= 2000 && currentState != VERTICAL_VERTEX && currentState != VERTICAL_EDGE && ledState)
+  // {
+  //   doLights();
+  // }
+}
+
+// Function to return a random number between 0 and 255
+uint8_t getRandomNumber()
+{
+  return random(0, 256); // Upper bound is exclusive, so use 256 to include 255
 }
 
 void updateMotorSpeeds()
@@ -349,6 +542,7 @@ void handleCalibrationIndication()
   if (!calibrated && !calibrating)
   {
     Serial.println("first you need to calibrate the balancing points (over bluetooth)...");
+    sendData("Please calibrate the balancing points.");
     if (!calibrated_leds)
     {
       indicateCalibration();
@@ -356,7 +550,7 @@ void handleCalibrationIndication()
     }
     else
     {
-      pixels.clear();
+      // pixels.clear();
       calibrated_leds = false;
     }
   }
@@ -364,15 +558,28 @@ void handleCalibrationIndication()
 
 void indicateCalibration()
 {
-  for (int i = 0; i < NUMPIXELS; i++)
-  {
-    pixels.setPixelColor(i, 255, 255, 255);
-    pixels.setBrightness(255);
-    pixels.show();
-    delay(100);
-  }
-  delay(1000);
-  turnoff_pixel();
+  // for (int i = 0; i < NUMBERPIXELS; i++)
+  // {
+  //   pixels.setPixelColor(i, 255, 255, 255);
+  //   pixels.setBrightness(255);
+  //   pixels.show();
+  //   delay(100);
+  // }
+  // delay(1000);
+  // turnoff_pixel();
+
+  ledState = true;
+}
+
+void angle_setup()
+{
+  Wire.begin();
+  delay(100);
+  writeTo(MPU6050, PWR_MGMT_1, 0);
+  writeTo(MPU6050, ACCEL_CONFIG, accSens << 3); // Specifying output scaling of accelerometer
+  writeTo(MPU6050, GYRO_CONFIG, gyroSens << 3); // Specifying output scaling of gyroscope
+  delay(100);
+  calibrateGyro();
 }
 
 void calibrateGyro()
@@ -384,7 +591,15 @@ void calibrateGyro()
     delay(5);
   }
   GyZ_offset = GyZ_offset_sum >> 9;
-
+  for (int i = 0; i < NUM_LEDS; i++)
+  {
+    leds[i] = CRGB::Red; // Set LED color
+    FastLED.show();
+    delay(80);
+  }
+  delay(500);
+  FastLED.clear();
+  FastLED.show();
   for (int i = 0; i < 512; i++)
   {
     angle_calc();
@@ -392,7 +607,15 @@ void calibrateGyro()
     delay(5);
   }
   GyY_offset = GyY_offset_sum >> 9;
-
+  for (int i = 0; i < NUM_LEDS; i++)
+  {
+    leds[i] = CRGB::Blue; // Set LED color
+    FastLED.show();
+    delay(80);
+  }
+  delay(500);
+  FastLED.clear();
+  FastLED.show();
   for (int i = 0; i < 512; i++)
   {
     angle_calc();
@@ -400,66 +623,16 @@ void calibrateGyro()
     delay(5);
   }
   GyX_offset = GyX_offset_sum >> 9;
-}
-
-void angle_setup()
-{
-  Wire.begin();
-  delay(100);
-  writeTo(MPU6050, PWR_MGMT_1, 0);
-  writeTo(MPU6050, ACCEL_CONFIG, accSens << 3); // Specifying output scaling of accelerometer
-  writeTo(MPU6050, GYRO_CONFIG, gyroSens << 3); // Specifying output scaling of gyroscope
-  delay(100);
-
-  pixels.setPixelColor(0, 0, 255, 0);
-  pixels.setBrightness(255);
-  pixels.show();
-  for (int i = 0; i < 512; i++)
+  for (int i = 0; i < NUM_LEDS; i++)
   {
-    angle_calc();
-    GyZ_offset_sum += GyZ;
-    delay(5);
+    leds[i] = CRGB::Green; // Set LED color
+    FastLED.show();
+    delay(80);
   }
-  GyZ_offset = GyZ_offset_sum >> 9;
-  Serial.print("GyZ offset value = ");
-  Serial.println(GyZ_offset);
-
-  pixels.setPixelColor(1, 0, 255, 0);
-  pixels.setBrightness(255);
-  pixels.show();
-
-  for (int i = 0; i < 512; i++)
-  {
-    angle_calc();
-    GyY_offset_sum += GyY;
-    delay(5);
-  }
-  GyY_offset = GyY_offset_sum >> 9;
-  Serial.print("GyY offset value = ");
-  Serial.println(GyY_offset);
-
-  pixels.setPixelColor(2, 0, 255, 0);
-  pixels.setBrightness(255);
-  pixels.show();
-
-  for (int i = 0; i < 512; i++)
-  {
-    angle_calc();
-    GyX_offset_sum += GyX;
-    delay(5);
-  }
-  GyX_offset = GyX_offset_sum >> 9;
-  Serial.print("GyX offset value = ");
-  Serial.println(GyX_offset);
-
-  for (int i = 0; i < NUMPIXELS; i++)
-  {
-    pixels.setPixelColor(i, 40, 205, 180);
-    pixels.setBrightness(255);
-    pixels.show();
-  }
+  delay(500);
+  FastLED.clear();
+  FastLED.show();
   playNotes(4186, 4186, 4186, 100);
-  turnoff_pixel();
 }
 
 void readGyroData()
@@ -523,7 +696,7 @@ void calculateAngles()
 
   // Combine gyroscope and accelerometer data using complementary filter
   robot_angleY = robot_angleY * Gyro_amount + Acc_angleY * (1.0 - Gyro_amount);
-  robot_angleX = robot_angleX * Gyro_amount + Acc_angleX * (1.0 - Gyro_amount);
+  robot_angleX = robot_angleX * Gyro_amount_x + Acc_angleX * (1.0 - Gyro_amount_x);
 
   updateVerticalState();
 }
@@ -602,8 +775,8 @@ void handleVerticalVertexState()
   int pwm_Z = constrain(zK2 * gyroZ + zK3 * motors_speed_Z, -255, 255);
 
   // Update motor speeds
-  motors_speed_X += speed_X / 5;
-  motors_speed_Y += speed_Y / 5;
+  motors_speed_X += speed_X / motor_speed_x_divisor;
+  motors_speed_Y += speed_Y / motor_speed_y_divisor;
 
   // Control motors based on calculated PWM values
   XYZ_to_threeWay(-pwm_X, pwm_Y, -pwm_Z);
@@ -619,18 +792,6 @@ void handleVerticalEdgeState()
 
   motors_speed_X += motor3_speed / 5;
   Motor_control(3, pwm_X, motor3_speed, DIR3, PWM3_CH);
-}
-
-void turnoff_pixel()
-{
-  for (int i = 0; i < NUMPIXELS; i++)
-  {
-    pixels.setPixelColor(i, 0, 0, 0);
-    pixels.setBrightness(0);
-    pixels.show();
-    delay(10);
-    pixels.clear();
-  }
 }
 
 void writeTo(byte device, byte address, byte value)
@@ -682,17 +843,20 @@ void save()
   EEPROM.commit();
   EEPROM.get(0, offsets);
   if (offsets.ID == 96)
+  {
     calibrated = true;
+  }
   calibrating = false;
-  Serial.println("Calibrating off.");
+  Serial.println("Saved, Calibrating off.");
+  sendData("Saved, Calibrating off.");
   playNotes(4186, 4699, 5274, 100);
   delay(300);
 }
 
 void XYZ_to_threeWay(float pwm_X, float pwm_Y, float pwm_Z)
 {
-  int16_t m1 = round((0.5 * pwm_X - 0.866 * pwm_Y) / 1.37 + pwm_Z);
-  int16_t m2 = round((0.5 * pwm_X + 0.866 * pwm_Y) / 1.37 + pwm_Z);
+  int16_t m1 = round((0.5 * pwm_X - speed_offset * pwm_Y) / 1.37 + pwm_Z);
+  int16_t m2 = round((0.5 * pwm_X + speed_offset * pwm_Y) / 1.37 + pwm_Z);
   int16_t m3 = -pwm_X / 1.37 + pwm_Z;
   Motor_control(1, m1, motor1_speed, DIR1, PWM1_CH);
   Motor_control(2, m2, motor2_speed, DIR2, PWM2_CH);
@@ -702,7 +866,7 @@ void XYZ_to_threeWay(float pwm_X, float pwm_Y, float pwm_Z)
 void threeWay_to_XY(int in_speed1, int in_speed2, int in_speed3)
 {
   speed_X = ((in_speed3 - (in_speed2 + in_speed1) * 0.5) * 0.5) * 1.81;
-  speed_Y = -(-0.866 * (in_speed2 - in_speed1)) / 1.1;
+  speed_Y = -(-speed_offset * (in_speed2 - in_speed1)) / 1.1;
 }
 
 void battVoltage(double voltage)
@@ -710,6 +874,7 @@ void battVoltage(double voltage)
   if (voltage > 8 && voltage <= 9.5)
   {
     digitalWrite(BUZZER, HIGH);
+    sendData("\r\n Battery voltage is low.");
   }
   else
   {
@@ -724,11 +889,80 @@ void pwmSet(uint8_t channel, uint32_t value)
 
 void Motor_control(int motor_number, int sp, int motor_speed, uint8_t dir_pin, uint8_t pwm_channel)
 {
-  sp = sp + motor_speed;
+  if (speed_up && motor_number == 2)
+  {
+    if (motor_speed_up < 180)
+    {
+      toggle_speed_up ? motor_speed_up++ : motor_speed_up = motor_speed_up;
+      toggle_speed_up = !toggle_speed_up;
+    }
+    else
+    {
+      if (motor_speed_up_delay < 180)
+      {
+        toggle_speed_up ? motor_speed_up_delay++ : motor_speed_up_delay = motor_speed_up_delay;
+        toggle_speed_up = !toggle_speed_up;
+      }
+      else
+      {
+        if (motor_hold_delay < 180)
+        {
+          toggle_speed_up ? motor_hold_delay++ : motor_hold_delay = motor_hold_delay;
+          toggle_speed_up = !toggle_speed_up;
+        }
+        else
+        {
+          speed_up = false;
+          slow_down = true;
+          motor_hold_delay = 0;
+          toggle_speed_up = true;
+          motor_speed_up_delay = 0;
+          // motor_speed_up = 0;
+          sendData("\r\n Slow down initiated.");
+        }
+      }
+    }
+    sp = sp + (motor_speed - motor_speed_up);
+  }
+  else if (slow_down && motor_number == 2)
+  {
+    if (motor_speed_up > 0)
+    {
+      toggle_speed_up ? motor_speed_up-- : motor_speed_up = motor_speed_up;
+      toggle_speed_up = !toggle_speed_up;
+    }
+    else
+    {
+      if (motor_speed_up_delay > 0)
+      {
+        toggle_speed_up ? motor_speed_up_delay-- : motor_speed_up_delay = motor_speed_up_delay;
+        toggle_speed_up = !toggle_speed_up;
+      }
+      else
+      {
+        slow_down = false;
+        // motors_speed_X = 0;
+        // motor_speed_up_delay = 0;
+        toggle_speed_up = true;
+        sendData("\r\n Slow down finished");
+      }
+    }
+    sp = sp + (motor_speed - motor_speed_up);
+    // std::string message = createMessage("motor speed: ", sp);
+    // sendData(message.c_str());
+  }
+  else
+  {
+    sp = sp + motor_speed;
+  }
+
   if (sp < 0)
     digitalWrite(dir_pin, LOW);
   else
+  {
     digitalWrite(dir_pin, HIGH);
+  }
+
   pwmSet(pwm_channel, 255 - abs(sp));
 }
 
