@@ -1,5 +1,7 @@
 # ESP32 Self balancing cube.
 
+Please see this updated repo for a [new design.](https://github.com/metanurb21/cubli?tab=readme-ov-file) 
+
 This is based on design and code by [RemRC.](https://github.com/remrc/Self-Balancing-Cube/blob/main/README.md)
 I made some modifications and refactoring of the code to suite my needs, PlatformIO, espressif32@5.0.0 and to use BLE to work with my iPhone alng with a PCB schematic and gerber files. I am replacing the 3D printed frame with a new design from 1/16" Stainless Steel that is currently being laser cut. The PCB will also be here soon. Update to come later this week.
 
